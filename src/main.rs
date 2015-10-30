@@ -39,12 +39,24 @@ fn update_balances(balances: &mut BTreeMap<String, Rational>, update: &BTreeMap<
 	println!("    New balances: {}", json::encode(balances).unwrap());
 }
 
-fn monitor_changes(changes_url: String, doc_root: String, balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>, initial_update_seq: u32) {
+fn monitor_changes(
+	changes_url: String,
+	doc_root: String,
+	poll_timeout: Option<u32>,
+	balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>,
+	initial_update_seq: u32
+) {
 	thread::spawn(move || {
 		let mut update_seq = initial_update_seq;
 
 		loop {
-			let poll_url = format!("{}?feed=longpoll&since={}&timeout=30000", changes_url, update_seq);
+			let timeout_section =
+				if let Some(timeout) = poll_timeout {
+					format!("&timeout={}", timeout)
+				} else {
+					"".to_string()
+				};
+			let poll_url = format!("{}?feed=longpoll&since={}{}", changes_url, update_seq, timeout_section);
 
 			let changes: Changes = get_json(&poll_url).unwrap();
 			if changes.results.len() > 0 {
@@ -116,7 +128,7 @@ fn main() {
 
 	let shared_balances_map = Arc::new(Mutex::new(balances_map));
 
-	monitor_changes(config.urls.changes, config.urls.doc_root, shared_balances_map.clone(), balances.update_seq);
+	monitor_changes(config.urls.changes, config.urls.doc_root, config.poll_timeout, shared_balances_map.clone(), balances.update_seq);
 
 	let mut router = Router::new();
 	router.get("/", move |r: &mut Request| serve_balances(r, shared_balances_map.clone()));

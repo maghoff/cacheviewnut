@@ -13,7 +13,8 @@ pub struct ConfigUrls {
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
 pub struct Config {
-	pub urls : ConfigUrls,
+	pub poll_timeout: Option<u32>,
+	pub urls: ConfigUrls,
 }
 
 #[derive(Debug)]
