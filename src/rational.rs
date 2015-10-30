@@ -8,9 +8,10 @@ use self::num::rational::BigRational as BR;
 use self::regex::Regex;
 use self::rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 use std::fmt;
+use num::traits::FromPrimitive;
 
 #[derive(Debug, PartialEq)]
-pub struct Rational(BR);
+pub struct Rational(pub BR);
 
 pub fn parse_mixed_number(number : &str) -> Result<Rational, String> {
 	let mixed_number = Regex::new(r"^((-)?(\d+)( (\d+/\d+))?|(-?\d+/\d+))$").unwrap();
@@ -25,6 +26,10 @@ pub fn parse_mixed_number(number : &str) -> Result<Rational, String> {
 		},
 		None => Err("Not a valid mixed number".to_string())
 	}
+}
+
+pub fn from_i32(number: i32) -> Rational {
+	Rational(BR::from_integer(num::bigint::BigInt::from_i32(number).unwrap()))
 }
 
 impl Decodable for Rational {
