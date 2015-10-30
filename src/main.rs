@@ -10,9 +10,10 @@ mod config;
 
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-use couchdb::{ReducedViewWithUpdateSeq, Changes, TransactionDocument, RevisionsDocument, ReducedView, Row};
+use couchdb::{ReducedViewWithUpdateSeq, Changes, RevisionsDocument, ReducedView, Row};
+use sharebill::TransactionDocument;
 use http_helper::{get_url, get_json};
 use rational::Rational;
 use rustc_serialize::json;
@@ -25,7 +26,7 @@ use iron::mime::Mime;
 use router::Router;
 
 
-fn update_balances(balances: &mut HashMap<String, Rational>, update: &HashMap<String, Rational>, multiplier_int: i32) {
+fn update_balances(balances: &mut BTreeMap<String, Rational>, update: &BTreeMap<String, Rational>, multiplier_int: i32) {
 	let multiplier = &rational::from_i32(multiplier_int).0;
 	let zero = rational::from_i32(0);
 	println!("    Update by {} x {:?}", &multiplier, update);
@@ -38,7 +39,7 @@ fn update_balances(balances: &mut HashMap<String, Rational>, update: &HashMap<St
 	println!("    New balances: {}", json::encode(balances).unwrap());
 }
 
-fn monitor_changes(changes_url: String, doc_root: String, balances_lock: Arc<Mutex<HashMap<String, Rational>>>, initial_update_seq: u32) {
+fn monitor_changes(changes_url: String, doc_root: String, balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>, initial_update_seq: u32) {
 	thread::spawn(move || {
 		let mut update_seq = initial_update_seq;
 
@@ -86,7 +87,7 @@ fn monitor_changes(changes_url: String, doc_root: String, balances_lock: Arc<Mut
 	});
 }
 
-fn serve_balances(_: &mut Request, balances_lock: Arc<Mutex<HashMap<String, Rational>>>) -> IronResult<Response> {
+fn serve_balances(_: &mut Request, balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>) -> IronResult<Response> {
 	let application_json = "application/json".parse::<Mime>().unwrap();
 	let balances = balances_lock.lock().unwrap();
 
@@ -108,7 +109,7 @@ fn main() {
 	println!("Loading initial state from origin server ({})...", &config.urls.view);
 	let balances : ReducedViewWithUpdateSeq<Rational> = json::decode(&get_url(&config.urls.view).unwrap()).unwrap();
 
-	let mut balances_map = HashMap::<String, Rational>::new();
+	let mut balances_map = BTreeMap::<String, Rational>::new();
 	for balance in &balances.rows {
 		balances_map.insert(balance.key.clone(), Rational(balance.value.0.clone()));
 	}
