@@ -20,3 +20,38 @@ pub struct TransactionDocument {
 	pub meta: Meta,
 	pub transaction: Transaction,
 }
+
+
+pub struct SharebillBalances;
+
+impl SharebillBalances {
+	pub fn map<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
+		where Emit : FnMut(&String, &Rational)
+	{
+		for (account, value) in &doc.transaction.debets {
+			emit(&account, &Rational(-value.0.clone()));
+		}
+		for (account, value) in &doc.transaction.credits {
+			emit(&account, &value);
+		}
+	}
+
+	pub fn unmap<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
+		where Emit : FnMut(&String, &Rational)
+	{
+		for (account, value) in &doc.transaction.debets {
+			emit(&account, &value);
+		}
+		for (account, value) in &doc.transaction.credits {
+			emit(&account, &Rational(-value.0.clone()));
+		}
+	}
+
+	pub fn reduce(&self, _key: &str, values: &Vec<Rational>) -> Rational {
+		let mut sum = values[0].0.clone();
+		for value in &values[1..] {
+			sum = &sum + &value.0;
+		}
+		return Rational(sum);
+	}
+}

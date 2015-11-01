@@ -11,9 +11,10 @@ mod config;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use couchdb::{ReducedViewWithUpdateSeq, Changes, RevisionsDocument, ReducedView, Row};
-use sharebill::TransactionDocument;
+use sharebill::{TransactionDocument, SharebillBalances};
 use http_helper::{get_url, get_json};
 use rational::Rational;
 use rustc_serialize::json;
@@ -26,20 +27,8 @@ use iron::mime::Mime;
 use router::Router;
 
 
-fn update_balances(balances: &mut BTreeMap<String, Rational>, update: &BTreeMap<String, Rational>, multiplier_int: i32) {
-	let multiplier = &rational::from_i32(multiplier_int).0;
-	let zero = rational::from_i32(0);
-	println!("    Update by {} x {:?}", &multiplier, update);
-
-	for (key, value) in update {
-		let scaled = value.0.clone() * multiplier;
-		let new_value = Rational(balances.get(key).unwrap_or(&zero).0.clone() + scaled);
-		balances.insert(key.to_string(), new_value);
-	}
-	println!("    New balances: {}", json::encode(balances).unwrap());
-}
-
 fn monitor_changes(
+	view: SharebillBalances,
 	changes_url: String,
 	doc_root: String,
 	poll_timeout: Option<u32>,
@@ -63,6 +52,10 @@ fn monitor_changes(
 				println!("{:?}", changes);
 
 				let mut balances = balances_lock.lock().unwrap();
+				let mut key_value_list = BTreeMap::<String, Vec<Rational>>::new();
+				for (key, value) in &*balances {
+					key_value_list.insert(key.clone(), vec![(*value).clone()]);
+				}
 
 				for change in changes.results {
 					assert_eq!(change.changes.len(), 1);
@@ -81,16 +74,34 @@ fn monitor_changes(
 						let prev_rev = format!("{}-{}", revisions.start - (change_index+1), &revisions.ids[change_index + 1]);
 						let remove_doc_url = format!("{}{}?rev={}", doc_root, change.id, prev_rev);
 						let remove_doc: TransactionDocument = get_json(&remove_doc_url).unwrap();
-						update_balances(&mut balances, &remove_doc.transaction.debets, 1);
-						update_balances(&mut balances, &remove_doc.transaction.credits, -1);
+						view.unmap(&remove_doc, |key, value| {
+							let mut v = match key_value_list.entry(key.clone()) {
+								Entry::Occupied(o) => o.into_mut(),
+								Entry::Vacant(v) => v.insert(Vec::<Rational>::new())
+							};
+							v.push(value.clone());
+						});
 					}
 
 					if change.deleted != Some(true) {
 						let add_doc_url = format!("{}{}?rev={}", doc_root, change.id, revision.rev);
 						let add_doc: TransactionDocument = get_json(&add_doc_url).unwrap();
-						update_balances(&mut balances, &add_doc.transaction.debets, -1);
-						update_balances(&mut balances, &add_doc.transaction.credits, 1);
+						view.map(&add_doc, |key, value| {
+							let mut v = match key_value_list.entry(key.clone()) {
+								Entry::Occupied(o) => o.into_mut(),
+								Entry::Vacant(v) => v.insert(Vec::<Rational>::new())
+							};
+							v.push(value.clone());
+						});
 					}
+				}
+
+				for (key, values) in &key_value_list {
+					let value = view.reduce(&key, &values);
+					match balances.entry(key.clone()) {
+						Entry::Occupied(mut o) => { o.insert(value); },
+						Entry::Vacant(v) => { v.insert(value); }
+					};
 				}
 			}
 
@@ -128,7 +139,14 @@ fn main() {
 
 	let shared_balances_map = Arc::new(Mutex::new(balances_map));
 
-	monitor_changes(config.urls.changes, config.urls.doc_root, config.poll_timeout, shared_balances_map.clone(), balances.update_seq);
+	monitor_changes(
+		SharebillBalances,
+		config.urls.changes,
+		config.urls.doc_root,
+		config.poll_timeout,
+		shared_balances_map.clone(),
+		balances.update_seq
+	);
 
 	let mut router = Router::new();
 	router.get("/", move |r: &mut Request| serve_balances(r, shared_balances_map.clone()));
