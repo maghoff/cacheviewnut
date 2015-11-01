@@ -96,7 +96,10 @@ fn monitor_changes(
 			}
 
 			for (key, values) in &key_value_list {
-				let value = view.reduce(&key, &values);
+				let value = match values.len() {
+					1 => values[0].clone(),
+					_ => view.reduce(&key, &values)
+				};
 				match balances.entry(key.clone()) {
 					Entry::Occupied(mut o) => { o.insert(value); },
 					Entry::Vacant(v) => { v.insert(value); }
