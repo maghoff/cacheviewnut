@@ -111,19 +111,6 @@ fn monitor_changes(
 	}
 }
 
-fn monitor_changes_starter(
-	view: SharebillBalances,
-	changes_url: String,
-	doc_root: String,
-	poll_timeout: Option<u32>,
-	balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>,
-	initial_update_seq: u32
-) {
-	thread::spawn(move || {
-		monitor_changes(view, changes_url, doc_root, poll_timeout, balances_lock, initial_update_seq);
-	});
-}
-
 fn serve_balances(_: &mut Request, balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>) -> IronResult<Response> {
 	let application_json = "application/json".parse::<Mime>().unwrap();
 	let balances = balances_lock.lock().unwrap();
@@ -153,14 +140,17 @@ fn main() {
 
 	let shared_balances_map = Arc::new(Mutex::new(balances_map));
 
-	monitor_changes_starter(
-		SharebillBalances,
-		config.urls.changes,
-		config.urls.doc_root,
-		config.poll_timeout,
-		shared_balances_map.clone(),
-		balances.update_seq
-	);
+	let balances_map_for_monitor_changes = shared_balances_map.clone();
+	thread::spawn(move || {
+		monitor_changes(
+			SharebillBalances,
+			config.urls.changes,
+			config.urls.doc_root,
+			config.poll_timeout,
+			balances_map_for_monitor_changes,
+			balances.update_seq
+		);
+	});
 
 	let mut router = Router::new();
 	router.get("/", move |r: &mut Request| serve_balances(r, shared_balances_map.clone()));
