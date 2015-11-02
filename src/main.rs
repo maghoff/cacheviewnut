@@ -29,9 +29,9 @@ use router::Router;
 
 fn monitor_changes(
 	view: SharebillBalances,
-	changes_url: String,
-	doc_root: String,
-	poll_timeout: Option<u32>,
+	changes_url: &str,
+	doc_root: &str,
+	poll_timeout: &Option<u32>,
 	balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>,
 	initial_update_seq: u32
 ) {
@@ -39,7 +39,7 @@ fn monitor_changes(
 
 	loop {
 		let timeout_section =
-			if let Some(timeout) = poll_timeout {
+			if let &Some(timeout) = poll_timeout {
 				format!("&timeout={}", timeout)
 			} else {
 				"".to_string()
@@ -144,9 +144,9 @@ fn main() {
 	thread::spawn(move || {
 		monitor_changes(
 			SharebillBalances,
-			config.urls.changes,
-			config.urls.doc_root,
-			config.poll_timeout,
+			&config.urls.changes,
+			&config.urls.doc_root,
+			&config.poll_timeout,
 			balances_map_for_monitor_changes,
 			balances.update_seq
 		);
