@@ -126,27 +126,32 @@ fn monitor_changes<DocumentType, KeyType, ValueType, ViewType>(
 	}
 }
 
-fn serve_balances(_: &mut Request, balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>) -> IronResult<Response> {
+fn serve_view<KeyType, ValueType>(_: &mut Request, shared_data: Arc<Mutex<BTreeMap<KeyType, ValueType>>>) -> IronResult<Response>
+	where
+		KeyType: Clone + rustc_serialize::Encodable,
+		ValueType: Clone + rustc_serialize::Encodable
+{
 	let application_json = "application/json".parse::<Mime>().unwrap();
-	let balances = balances_lock.lock().unwrap();
+	let data = shared_data.lock().unwrap();
 
-	let mut balances_list = ReducedView::<Rational> { rows: vec!() };
-	for (account, balance) in &*balances {
-		let row = Row::<Rational> {
-			key: account.clone(),
-			value: Rational(balance.0.clone()),
-		};
-		balances_list.rows.push(row);
+	let mut generated_view = ReducedView::<KeyType, ValueType> { rows: vec!() };
+	for (key, value) in &*data {
+		generated_view.rows.push(
+			Row::<KeyType, ValueType> {
+				key: key.clone(),
+				value: value.clone(),
+			}
+		);
 	}
 
-	Ok(Response::with((application_json, status::Ok, json::encode(&balances_list).unwrap())))
+	Ok(Response::with((application_json, status::Ok, json::encode(&generated_view).unwrap())))
 }
 
 fn main() {
 	let config = config::Config::from_file("config.json").unwrap();
 
 	println!("Loading initial state from origin server ({})...", &config.urls.view);
-	let balances : ReducedViewWithUpdateSeq<Rational> = json::decode(&get_url(&config.urls.view).unwrap()).unwrap();
+	let balances : ReducedViewWithUpdateSeq<String, Rational> = json::decode(&get_url(&config.urls.view).unwrap()).unwrap();
 
 	let mut balances_map = BTreeMap::<String, Rational>::new();
 	for balance in &balances.rows {
@@ -168,7 +173,7 @@ fn main() {
 	});
 
 	let mut router = Router::new();
-	router.get("/", move |r: &mut Request| serve_balances(r, shared_balances_map.clone()));
+	router.get("/", move |r: &mut Request| serve_view(r, shared_balances_map.clone()));
 
 	println!("Ready at http://localhost:4000");
 	Iron::new(router).http("localhost:4000").unwrap();

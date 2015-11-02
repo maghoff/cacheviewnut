@@ -1,32 +1,32 @@
 #[derive(Debug, RustcDecodable, RustcEncodable)]
-pub struct RowWithId<T> {
+pub struct RowWithId<Key, Value> {
 	pub id: String,
-	pub key: String,
-	pub value: T,
+	pub key: Key,
+	pub value: Value,
 }
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
-pub struct Row<T> {
-	pub key: String,
-	pub value: T,
+pub struct Row<Key, Value> {
+	pub key: Key,
+	pub value: Value,
 }
 
 #[derive(Debug, RustcDecodable)]
-pub struct View<Value> {
+pub struct View<Key, Value> {
 	pub total_rows: u32,
 	pub offset: u32,
-	pub rows: Vec<RowWithId<Value>>,
+	pub rows: Vec<RowWithId<Key, Value>>,
 }
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
-pub struct ReducedView<Value> {
-	pub rows: Vec<Row<Value>>,
+pub struct ReducedView<Key, Value> {
+	pub rows: Vec<Row<Key, Value>>,
 }
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
-pub struct ReducedViewWithUpdateSeq<Value> {
+pub struct ReducedViewWithUpdateSeq<Key, Value> {
 	pub update_seq: u32,
-	pub rows: Vec<Row<Value>>,
+	pub rows: Vec<Row<Key, Value>>,
 }
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
