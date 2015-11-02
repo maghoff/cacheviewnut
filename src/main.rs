@@ -1,4 +1,5 @@
 #![feature(core)]
+#![feature(scoped)]
 extern crate rustc_serialize;
 extern crate num;
 
@@ -15,9 +16,8 @@ use std::collections::btree_map::Entry;
 
 use couchdb::{ReducedViewWithUpdateSeq, Changes, RevisionsDocument, ReducedView, Row};
 use http_helper::{get_url, get_json};
-use rustc_serialize::json;
+use rustc_serialize::{json, Encodable, Decodable};
 
-use rational::Rational;
 use sharebill::SharebillBalances;
 
 extern crate iron;
@@ -47,7 +47,7 @@ fn monitor_changes<DocumentType, KeyType, ValueType, ViewType>(
 	initial_update_seq: u32
 )
 	where
-		DocumentType: rustc_serialize::Decodable,
+		DocumentType: Decodable,
 		KeyType: Clone + Ord,
 		ValueType: Clone,
 		ViewType: View<DocumentType, KeyType, ValueType>
@@ -128,8 +128,8 @@ fn monitor_changes<DocumentType, KeyType, ValueType, ViewType>(
 
 fn serve_view<KeyType, ValueType>(_: &mut Request, shared_data: Arc<Mutex<BTreeMap<KeyType, ValueType>>>) -> IronResult<Response>
 	where
-		KeyType: Clone + rustc_serialize::Encodable,
-		ValueType: Clone + rustc_serialize::Encodable
+		KeyType: Clone + Encodable,
+		ValueType: Clone + Encodable
 {
 	let application_json = "application/json".parse::<Mime>().unwrap();
 	let data = shared_data.lock().unwrap();
@@ -147,34 +147,60 @@ fn serve_view<KeyType, ValueType>(_: &mut Request, shared_data: Arc<Mutex<BTreeM
 	Ok(Response::with((application_json, status::Ok, json::encode(&generated_view).unwrap())))
 }
 
-fn main() {
-	let config = config::Config::from_file("config.json").unwrap();
+fn cacheviewnut<DocumentType, KeyType, ValueType, ViewType>(
+	view: ViewType,
+	view_url: &str,
+	changes_url: &str,
+	doc_root: &str,
+	poll_timeout: &Option<u32>,
+)
+	where
+		DocumentType: Decodable,
+		KeyType: Send + std::any::Any + Encodable + Decodable + Clone + Ord,
+		ValueType: Send + std::any::Any + Encodable + Decodable + Clone,
+		ViewType: Send + View<DocumentType, KeyType, ValueType>
+{
+	println!("Loading initial state from origin server ({})...", &view_url);
+	let data: ReducedViewWithUpdateSeq<KeyType, ValueType> = json::decode(&get_url(&view_url).unwrap()).unwrap();
 
-	println!("Loading initial state from origin server ({})...", &config.urls.view);
-	let balances : ReducedViewWithUpdateSeq<String, Rational> = json::decode(&get_url(&config.urls.view).unwrap()).unwrap();
-
-	let mut balances_map = BTreeMap::<String, Rational>::new();
-	for balance in &balances.rows {
-		balances_map.insert(balance.key.clone(), Rational(balance.value.0.clone()));
+	let mut data_map = BTreeMap::<KeyType, ValueType>::new();
+	for row in &data.rows {
+		data_map.insert(row.key.clone(), row.value.clone());
 	}
 
-	let shared_balances_map = Arc::new(Mutex::new(balances_map));
+	let shared_data_map = Arc::new(Mutex::new(data_map));
 
-	let balances_map_for_monitor_changes = shared_balances_map.clone();
-	thread::spawn(move || {
-		monitor_changes(
-			SharebillBalances,
-			&config.urls.changes,
-			&config.urls.doc_root,
-			&config.poll_timeout,
-			balances_map_for_monitor_changes,
-			balances.update_seq
-		);
-	});
+	let monitor_thread = {
+		let shared_data_map = shared_data_map.clone();
+		thread::scoped(move || {
+			monitor_changes(
+				view,
+				&changes_url,
+				&doc_root,
+				&poll_timeout,
+				shared_data_map,
+				data.update_seq
+			);
+		})
+	};
 
 	let mut router = Router::new();
-	router.get("/", move |r: &mut Request| serve_view(r, shared_balances_map.clone()));
+	router.get("/", move |r: &mut Request| serve_view(r, shared_data_map.clone()));
 
 	println!("Ready at http://localhost:4000");
 	Iron::new(router).http("localhost:4000").unwrap();
+
+	monitor_thread.join();
+}
+
+fn main() {
+	let config = config::Config::from_file("config.json").unwrap();
+
+	cacheviewnut(
+		SharebillBalances,
+		&config.urls.view,
+		&config.urls.changes,
+		&config.urls.doc_root,
+		&config.poll_timeout,
+	);
 }
