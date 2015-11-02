@@ -14,10 +14,11 @@ use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
 use couchdb::{ReducedViewWithUpdateSeq, Changes, RevisionsDocument, ReducedView, Row};
-use sharebill::{TransactionDocument, SharebillBalances};
 use http_helper::{get_url, get_json};
-use rational::Rational;
 use rustc_serialize::json;
+
+use rational::Rational;
+use sharebill::SharebillBalances;
 
 extern crate iron;
 extern crate router;
@@ -27,14 +28,30 @@ use iron::mime::Mime;
 use router::Router;
 
 
-fn monitor_changes(
-	view: SharebillBalances,
+pub trait View<DocumentType, KeyType, ValueType> where KeyType: Clone, ValueType: Clone {
+	fn map<Emit>(&self, doc: &DocumentType, mut emit: Emit)
+		where Emit : FnMut(&KeyType, &ValueType);
+
+	fn unmap<Emit>(&self, doc: &DocumentType, mut emit: Emit)
+		where Emit : FnMut(&KeyType, &ValueType);
+
+	fn reduce(&self, _key: &KeyType, values: &Vec<ValueType>) -> ValueType;
+}
+
+fn monitor_changes<DocumentType, KeyType, ValueType, ViewType>(
+	view: ViewType,
 	changes_url: &str,
 	doc_root: &str,
 	poll_timeout: &Option<u32>,
-	balances_lock: Arc<Mutex<BTreeMap<String, Rational>>>,
+	balances_lock: Arc<Mutex<BTreeMap<KeyType, ValueType>>>,
 	initial_update_seq: u32
-) {
+)
+	where
+		DocumentType: rustc_serialize::Decodable,
+		KeyType: Clone + Ord,
+		ValueType: Clone,
+		ViewType: View<DocumentType, KeyType, ValueType>
+{
 	let mut update_seq = initial_update_seq;
 
 	loop {
@@ -51,7 +68,7 @@ fn monitor_changes(
 			println!("{:?}", changes);
 
 			let mut balances = balances_lock.lock().unwrap();
-			let mut key_value_list = BTreeMap::<String, Vec<Rational>>::new();
+			let mut key_value_list = BTreeMap::<KeyType, Vec<ValueType>>::new();
 			for (key, value) in &*balances {
 				key_value_list.insert(key.clone(), vec![(*value).clone()]);
 			}
@@ -72,25 +89,23 @@ fn monitor_changes(
 				if change_index + 1 < revisions.ids.len() {
 					let prev_rev = format!("{}-{}", revisions.start - (change_index+1), &revisions.ids[change_index + 1]);
 					let remove_doc_url = format!("{}{}?rev={}", doc_root, change.id, prev_rev);
-					let remove_doc: TransactionDocument = get_json(&remove_doc_url).unwrap();
+					let remove_doc: DocumentType = get_json(&remove_doc_url).unwrap();
 					view.unmap(&remove_doc, |key, value| {
-						let mut v = match key_value_list.entry(key.clone()) {
-							Entry::Occupied(o) => o.into_mut(),
-							Entry::Vacant(v) => v.insert(Vec::<Rational>::new())
+						match key_value_list.entry(key.clone()) {
+							Entry::Occupied(o) => { o.into_mut().push(value.clone()); },
+							Entry::Vacant(v) => { v.insert(vec![value.clone()]); }
 						};
-						v.push(value.clone());
 					});
 				}
 
 				if change.deleted != Some(true) {
 					let add_doc_url = format!("{}{}?rev={}", doc_root, change.id, revision.rev);
-					let add_doc: TransactionDocument = get_json(&add_doc_url).unwrap();
+					let add_doc: DocumentType = get_json(&add_doc_url).unwrap();
 					view.map(&add_doc, |key, value| {
-						let mut v = match key_value_list.entry(key.clone()) {
-							Entry::Occupied(o) => o.into_mut(),
-							Entry::Vacant(v) => v.insert(Vec::<Rational>::new())
+						match key_value_list.entry(key.clone()) {
+							Entry::Occupied(o) => { o.into_mut().push(value.clone()); },
+							Entry::Vacant(v) => { v.insert(vec![value.clone()]); }
 						};
-						v.push(value.clone());
 					});
 				}
 			}

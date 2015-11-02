@@ -1,5 +1,6 @@
 use std::collections::btree_map::BTreeMap;
 use rational::Rational;
+use ::View;
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
 pub struct Meta {
@@ -24,8 +25,8 @@ pub struct TransactionDocument {
 
 pub struct SharebillBalances;
 
-impl SharebillBalances {
-	pub fn map<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
+impl View<TransactionDocument, String, Rational> for SharebillBalances {
+	fn map<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
 		where Emit : FnMut(&String, &Rational)
 	{
 		for (account, value) in &doc.transaction.debets {
@@ -36,7 +37,7 @@ impl SharebillBalances {
 		}
 	}
 
-	pub fn unmap<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
+	fn unmap<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
 		where Emit : FnMut(&String, &Rational)
 	{
 		for (account, value) in &doc.transaction.debets {
@@ -47,7 +48,7 @@ impl SharebillBalances {
 		}
 	}
 
-	pub fn reduce(&self, _key: &str, values: &Vec<Rational>) -> Rational {
+	fn reduce(&self, _key: &String, values: &Vec<Rational>) -> Rational {
 		let mut sum = values[0].0.clone();
 		for value in &values[1..] {
 			sum = &sum + &value.0;
