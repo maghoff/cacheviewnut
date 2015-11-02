@@ -29,10 +29,10 @@ use router::Router;
 
 
 pub trait View<DocumentType, KeyType, ValueType> where KeyType: Clone, ValueType: Clone {
-	fn map<Emit>(&self, doc: &DocumentType, mut emit: Emit)
+	fn map<Emit>(&self, doc: &DocumentType, mut emit: &mut Emit)
 		where Emit : FnMut(&KeyType, &ValueType);
 
-	fn unmap<Emit>(&self, doc: &DocumentType, mut emit: Emit)
+	fn unmap<Emit>(&self, doc: &DocumentType, mut emit: &mut Emit)
 		where Emit : FnMut(&KeyType, &ValueType);
 
 	fn reduce(&self, _key: &KeyType, values: &Vec<ValueType>) -> ValueType;
@@ -74,40 +74,39 @@ fn monitor_changes<DocumentType, KeyType, ValueType, ViewType>(
 				key_value_list.insert(key.clone(), vec![(*value).clone()]);
 			}
 
-			for change in changes.results {
-				assert_eq!(change.changes.len(), 1);
-				let revision = &change.changes[0];
+			{
+				let mut emit = |key: &KeyType, value: &ValueType| {
+					match key_value_list.entry(key.clone()) {
+						Entry::Occupied(o) => { o.into_mut().push(value.clone()); },
+						Entry::Vacant(v) => { v.insert(vec![value.clone()]); }
+					};
+				};
 
-				let docurl = format!("{}{}?rev={}&revs=true", doc_root, change.id, revision.rev);
-				let doc: RevisionsDocument = get_json(&docurl).unwrap();
-				let revisions = doc._revisions;
-				let rev_split = revision.rev.split("-").collect::<Vec<&str>>();
-				assert_eq!(rev_split.len(), 2);
-				let rev_number = rev_split[0].parse::<usize>().unwrap();
-				let change_index = revisions.start - rev_number;
-				assert_eq!(revisions.ids[change_index], rev_split[1]);
+				for change in changes.results {
+					assert_eq!(change.changes.len(), 1);
+					let revision = &change.changes[0];
 
-				if change_index + 1 < revisions.ids.len() {
-					let prev_rev = format!("{}-{}", revisions.start - (change_index+1), &revisions.ids[change_index + 1]);
-					let remove_doc_url = format!("{}{}?rev={}", doc_root, change.id, prev_rev);
-					let remove_doc: DocumentType = get_json(&remove_doc_url).unwrap();
-					view.unmap(&remove_doc, |key, value| {
-						match key_value_list.entry(key.clone()) {
-							Entry::Occupied(o) => { o.into_mut().push(value.clone()); },
-							Entry::Vacant(v) => { v.insert(vec![value.clone()]); }
-						};
-					});
-				}
+					let docurl = format!("{}{}?rev={}&revs=true", doc_root, change.id, revision.rev);
+					let doc: RevisionsDocument = get_json(&docurl).unwrap();
+					let revisions = doc._revisions;
+					let rev_split = revision.rev.split("-").collect::<Vec<&str>>();
+					assert_eq!(rev_split.len(), 2);
+					let rev_number = rev_split[0].parse::<usize>().unwrap();
+					let change_index = revisions.start - rev_number;
+					assert_eq!(revisions.ids[change_index], rev_split[1]);
 
-				if change.deleted != Some(true) {
-					let add_doc_url = format!("{}{}?rev={}", doc_root, change.id, revision.rev);
-					let add_doc: DocumentType = get_json(&add_doc_url).unwrap();
-					view.map(&add_doc, |key, value| {
-						match key_value_list.entry(key.clone()) {
-							Entry::Occupied(o) => { o.into_mut().push(value.clone()); },
-							Entry::Vacant(v) => { v.insert(vec![value.clone()]); }
-						};
-					});
+					if change_index + 1 < revisions.ids.len() {
+						let prev_rev = format!("{}-{}", revisions.start - (change_index+1), &revisions.ids[change_index + 1]);
+						let remove_doc_url = format!("{}{}?rev={}", doc_root, change.id, prev_rev);
+						let remove_doc: DocumentType = get_json(&remove_doc_url).unwrap();
+						view.unmap(&remove_doc, &mut emit);
+					}
+
+					if change.deleted != Some(true) {
+						let add_doc_url = format!("{}{}?rev={}", doc_root, change.id, revision.rev);
+						let add_doc: DocumentType = get_json(&add_doc_url).unwrap();
+						view.map(&add_doc, &mut emit);
+					}
 				}
 			}
 

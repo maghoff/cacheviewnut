@@ -26,7 +26,7 @@ pub struct TransactionDocument {
 pub struct SharebillBalances;
 
 impl View<TransactionDocument, String, Rational> for SharebillBalances {
-	fn map<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
+	fn map<Emit>(&self, doc: &TransactionDocument, mut emit: &mut Emit)
 		where Emit : FnMut(&String, &Rational)
 	{
 		for (account, value) in &doc.transaction.debets {
@@ -37,7 +37,7 @@ impl View<TransactionDocument, String, Rational> for SharebillBalances {
 		}
 	}
 
-	fn unmap<Emit>(&self, doc: &TransactionDocument, mut emit: Emit)
+	fn unmap<Emit>(&self, doc: &TransactionDocument, mut emit: &mut Emit)
 		where Emit : FnMut(&String, &Rational)
 	{
 		for (account, value) in &doc.transaction.debets {
