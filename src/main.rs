@@ -54,16 +54,17 @@ fn monitor_changes<DocumentType, KeyType, ValueType, ViewType>(
 {
 	let mut update_seq = initial_update_seq;
 
-	loop {
-		let timeout_section =
-			if let &Some(timeout) = poll_timeout {
-				format!("&timeout={}", timeout)
-			} else {
-				"".to_string()
-			};
-		let poll_url = format!("{}?feed=longpoll&since={}{}", changes_url, update_seq, timeout_section);
+	let timeout_section =
+		if let &Some(timeout) = poll_timeout {
+			format!("&timeout={}", timeout)
+		} else {
+			"".to_string()
+		};
 
+	loop {
+		let poll_url = format!("{}?feed=longpoll&since={}{}", changes_url, update_seq, timeout_section);
 		let changes: Changes = get_json(&poll_url).unwrap();
+
 		if changes.results.len() > 0 {
 			println!("{:?}", changes);
 
