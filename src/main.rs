@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
 use couchdb::{ReducedViewWithUpdateSeq, Changes, RevisionsDocument, ReducedView, Row};
-use http_helper::{get_url, get_json};
+use http_helper::get_json;
 use rustc_serialize::{json, Encodable, Decodable};
 
 use sharebill::SharebillBalances;
@@ -161,7 +161,7 @@ fn cacheviewnut<DocumentType, KeyType, ValueType, ViewType>(
 		ViewType: Send + View<DocumentType, KeyType, ValueType>
 {
 	println!("Loading initial state from origin server ({})...", &view_url);
-	let data: ReducedViewWithUpdateSeq<KeyType, ValueType> = json::decode(&get_url(&view_url).unwrap()).unwrap();
+	let data: ReducedViewWithUpdateSeq<KeyType, ValueType> = get_json(&view_url).unwrap();
 
 	let mut data_map = BTreeMap::<KeyType, ValueType>::new();
 	for row in &data.rows {
