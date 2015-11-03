@@ -1,7 +1,7 @@
 #![feature(core)]
-#![feature(scoped)]
 extern crate rustc_serialize;
 extern crate num;
+extern crate crossbeam;
 
 mod couchdb;
 mod http_helper;
@@ -10,7 +10,6 @@ mod sharebill;
 mod config;
 
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
@@ -156,8 +155,8 @@ fn cacheviewnut<DocumentType, KeyType, ValueType, ViewType>(
 )
 	where
 		DocumentType: Decodable,
-		KeyType: Send + std::any::Any + Encodable + Decodable + Clone + Ord,
-		ValueType: Send + std::any::Any + Encodable + Decodable + Clone,
+		KeyType: std::any::Any + Send + Sync + Encodable + Decodable + Clone + Ord,
+		ValueType: std::any::Any + Send + Sync + Encodable + Decodable + Clone,
 		ViewType: Send + View<DocumentType, KeyType, ValueType>
 {
 	println!("Loading initial state from origin server ({})...", &view_url);
@@ -170,27 +169,27 @@ fn cacheviewnut<DocumentType, KeyType, ValueType, ViewType>(
 
 	let shared_data_map = Arc::new(Mutex::new(data_map));
 
-	let monitor_thread = {
-		let shared_data_map = shared_data_map.clone();
-		thread::scoped(move || {
-			monitor_changes(
-				view,
-				&changes_url,
-				&doc_root,
-				&poll_timeout,
-				shared_data_map,
-				data.update_seq
-			);
-		})
-	};
+	crossbeam::scope(|scope| {
+		{
+			let shared_data_map = shared_data_map.clone();
+			scope.spawn(|| {
+				monitor_changes(
+					view,
+					&changes_url,
+					&doc_root,
+					&poll_timeout,
+					shared_data_map,
+					data.update_seq
+				);
+			});
+		};
 
-	let mut router = Router::new();
-	router.get("/", move |r: &mut Request| serve_view(r, shared_data_map.clone()));
+		let mut router = Router::new();
+		router.get("/", move |r: &mut Request| serve_view(r, shared_data_map.clone()));
 
-	println!("Ready at http://localhost:4000");
-	Iron::new(router).http("localhost:4000").unwrap();
-
-	monitor_thread.join();
+		println!("Ready at http://localhost:4000");
+		Iron::new(router).http("localhost:4000").unwrap();
+	});
 }
 
 fn main() {
