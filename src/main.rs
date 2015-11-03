@@ -1,7 +1,6 @@
-#![feature(core)]
-extern crate rustc_serialize;
-extern crate num;
 extern crate crossbeam;
+extern crate num;
+extern crate rustc_serialize;
 
 mod couchdb;
 mod http_helper;

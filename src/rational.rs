@@ -1,9 +1,8 @@
-extern crate core;
 extern crate num;
-extern crate rustc_serialize;
 extern crate regex;
+extern crate rustc_serialize;
 
-use self::core::str::FromStr;
+use std::str::FromStr;
 use self::num::rational::BigRational as BR;
 use self::regex::Regex;
 use self::rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
