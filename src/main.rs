@@ -44,7 +44,7 @@ fn apply_change<DocumentType, KeyType, ValueType, ViewType, Emit>(
 ) -> Result<(), http_helper::Error>
 	where
 		DocumentType: Decodable,
-		KeyType: Clone + Ord,
+		KeyType: Clone,
 		ValueType: Clone,
 		ViewType: View<DocumentType, KeyType, ValueType>,
 		Emit: FnMut(&KeyType, &ValueType),
