@@ -41,6 +41,6 @@ impl Config {
 		let mut buffer = String::new();
 		try!{file.read_to_string(&mut buffer)};
 
-		Ok(try!{json::decode::<Config>(&buffer)})
+		Ok(try!{json::decode(&buffer)})
 	}
 }
