@@ -1,8 +1,7 @@
 use std::convert;
 use std::io;
-use std::io::prelude::*;
 use std::fs::File;
-use rustc_serialize::json;
+use rustc_serialize::{json, Decodable};
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
 pub struct ConfigUrls {
@@ -21,6 +20,7 @@ pub struct Config {
 pub enum Error {
 	Io(io::Error),
 	DecoderError(json::DecoderError),
+	ParserError(json::ParserError),
 }
 
 impl convert::From<io::Error> for Error {
@@ -35,12 +35,17 @@ impl convert::From<json::DecoderError> for Error {
 	}
 }
 
+impl convert::From<json::ParserError> for Error {
+	fn from(err: json::ParserError) -> Error {
+		Error::ParserError(err)
+	}
+}
+
 impl Config {
 	pub fn from_file(filename : &str) -> Result<Config, Error> {
-		let mut file = try!{File::open(filename)};
-		let mut buffer = String::new();
-		try!{file.read_to_string(&mut buffer)};
-
-		Ok(try!{json::decode(&buffer)})
+		let mut file = try!(File::open(filename));
+		let json = try!(json::Json::from_reader(&mut file));
+		let mut decoder = json::Decoder::new(json);
+		Ok(try!(Decodable::decode(&mut decoder)))
 	}
 }
