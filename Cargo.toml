@@ -3,6 +3,12 @@ name = "cacheviewnut"
 version = "0.0.1"
 authors = ["Magnus Hoff <maghoff@gmail.com>"]
 
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
 [dependencies]
 num = "~0.1"
 hyper = "~0.6.14"
