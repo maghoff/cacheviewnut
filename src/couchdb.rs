@@ -25,7 +25,7 @@ pub struct ReducedView<Key, Value> {
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
 pub struct ReducedViewWithUpdateSeq<Key, Value> {
-	pub update_seq: u32,
+	pub update_seq: String,
 	pub rows: Vec<Row<Key, Value>>,
 }
 
@@ -45,7 +45,7 @@ pub struct Change {
 #[derive(Debug, RustcDecodable, RustcEncodable)]
 pub struct Changes {
 	pub results: Vec<Change>,
-	pub last_seq: u32,
+	pub last_seq: String,
 }
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]

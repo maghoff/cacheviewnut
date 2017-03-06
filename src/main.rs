@@ -27,10 +27,10 @@ use router::Router;
 
 
 pub trait View<DocumentType, KeyType, ValueType> where KeyType: Clone, ValueType: Clone {
-	fn map<Emit>(&self, doc: &DocumentType, mut emit: &mut Emit)
+	fn map<Emit>(&self, doc: &DocumentType, emit: &mut Emit)
 		where Emit : FnMut(&KeyType, &ValueType);
 
-	fn unmap<Emit>(&self, doc: &DocumentType, mut emit: &mut Emit)
+	fn unmap<Emit>(&self, doc: &DocumentType, emit: &mut Emit)
 		where Emit : FnMut(&KeyType, &ValueType);
 
 	fn reduce(&self, _key: &KeyType, values: &Vec<ValueType>) -> ValueType;
@@ -83,7 +83,7 @@ fn monitor_changes<DocumentType, KeyType, ValueType, ViewType>(
 	doc_root: &str,
 	poll_timeout: &Option<u32>,
 	balances_lock: Arc<Mutex<BTreeMap<KeyType, ValueType>>>,
-	initial_update_seq: u32
+	initial_update_seq: String
 )
 	where
 		DocumentType: Decodable,
@@ -199,7 +199,7 @@ fn cacheviewnut<DocumentType, KeyType, ValueType, ViewType>(
 					&doc_root,
 					&poll_timeout,
 					shared_data_map,
-					data.update_seq
+					data.update_seq.to_string()
 				);
 			});
 		};
