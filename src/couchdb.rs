@@ -36,7 +36,7 @@ pub struct Revision {
 
 #[derive(Debug, RustcDecodable, RustcEncodable)]
 pub struct Change {
-	pub seq: u32,
+	pub seq: String,
 	pub id: String,
 	pub changes: Vec<Revision>,
 	pub deleted: Option<bool>,
